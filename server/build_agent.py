@@ -5,7 +5,11 @@ from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.memory import InMemorySaver
 
-from .tools.pass_the_butter import pass_the_butter
+from .tools.toy_business import (
+    find_employee,
+    get_budget,
+    get_department,
+)
 
 BuildAgentResult = CompiledStateGraph[MessagesState, None, MessagesState, MessagesState]
 
@@ -15,7 +19,11 @@ checkpointer = InMemorySaver()
 def build_agent(llm:BaseChatModel) -> BuildAgentResult:
     agent = create_agent(
         model=llm,
-        tools=[pass_the_butter],
+        tools=[
+            find_employee,
+            get_budget,
+            get_department,
+        ],
         name="agent",
     )
 

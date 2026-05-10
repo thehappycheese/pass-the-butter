@@ -39,7 +39,7 @@ async def _event_gen(request: Request, message: str, session_id:str, agent: Depe
             inputs,
             stream_mode=[
                 "messages",
-                "values",
+                "updates",
                 "custom"
             ],
             subgraphs=True,
@@ -49,7 +49,6 @@ async def _event_gen(request: Request, message: str, session_id:str, agent: Depe
                 break
 
             if mode == "messages":
-                # payload is (message_chunk, metadata)
                 chunk, _meta = payload
                 match chunk:
                     case AIMessageChunk(content=str() as text) if text:
@@ -62,19 +61,23 @@ async def _event_gen(request: Request, message: str, session_id:str, agent: Depe
                         yield {"event": "tool_result", "data": json.dumps({
                             "name": name, "content": str(content),
                         })}
-
-                if isinstance(chunk, AIMessageChunk):
-                    for tc in chunk.tool_calls or []:
-                        yield {"event": "tool_call", "data": json.dumps({
-                            "name": tc["name"], "args": tc["args"],
-                        })}
+                # NOTE: no tool_call emission here — handled in `updates`
 
             elif mode == "updates":
-                # node-level state diffs — useful for tracing graph progress
-                yield {"event": "update", "data": json.dumps({
-                    "namespace": list(ns),
-                    "nodes": list(payload.keys()),
-                })}
+                if not ns:  # skip root-graph updates; they replay subgraph output
+                    continue
+                for node_name, node_output in payload.items():
+                    if not isinstance(node_output, dict):
+                        continue
+                    for m in node_output.get("messages", []):
+                        for tc in getattr(m, "tool_calls", None) or []:
+                            yield {"event": "tool_call", "data": json.dumps({
+                                "name": tc["name"],
+                                "args": tc["args"],
+                            })}
+
+            elif mode == "custom":
+                yield {"event": "custom", "data": json.dumps(payload, default=str)}
 
             elif mode == "custom":
                 # anything emitted via get_stream_writer()
