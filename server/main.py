@@ -1,0 +1,97 @@
+
+import json
+from pathlib import Path
+
+from fastapi import  FastAPI, Request
+from fastapi.responses import FileResponse, StreamingResponse
+from langgraph.graph import MessagesState
+from pydantic import BaseModel
+
+
+from langchain_core.messages import HumanMessage, AIMessageChunk, AIMessage, ToolMessage
+from langchain_core.runnables.config import RunnableConfig
+from sse_starlette.sse import EventSourceResponse
+
+from .lifespan import lifespan, DependsAgent
+
+
+app = FastAPI(title="Butter Agent", lifespan=lifespan)
+
+
+STATIC_DIR = Path("static").resolve()
+assert STATIC_DIR.is_dir()
+assert (STATIC_DIR/"debug.html").is_file()
+
+@app.get("/")
+async def debug_page():
+    return FileResponse(STATIC_DIR / "debug.html")
+
+class InvokeRequest(BaseModel):
+    message: str
+    session_id: str
+
+
+async def _event_gen(request: Request, message: str, session_id:str, agent: DependsAgent):
+    config:RunnableConfig = {"configurable": {"thread_id": session_id}}
+    inputs = MessagesState(messages=[HumanMessage(content=message)])
+    try:
+        async for ns, mode, payload in agent.astream(
+            inputs,
+            stream_mode=[
+                "messages",
+                "values",
+                "custom"
+            ],
+            subgraphs=True,
+            config=config,
+        ):
+            if await request.is_disconnected():
+                break
+
+            if mode == "messages":
+                # payload is (message_chunk, metadata)
+                chunk, _meta = payload
+                match chunk:
+                    case AIMessageChunk(content=str() as text) if text:
+                        yield {"event": "token", "data": json.dumps({"text": text})}
+                    case AIMessageChunk(content=list() as blocks):
+                        for block in blocks:
+                            if isinstance(block, dict) and (text := block.get("text")):
+                                yield {"event": "token", "data": json.dumps({"text": text})}
+                    case ToolMessage(name=name, content=content):
+                        yield {"event": "tool_result", "data": json.dumps({
+                            "name": name, "content": str(content),
+                        })}
+
+                if isinstance(chunk, AIMessageChunk):
+                    for tc in chunk.tool_calls or []:
+                        yield {"event": "tool_call", "data": json.dumps({
+                            "name": tc["name"], "args": tc["args"],
+                        })}
+
+            elif mode == "updates":
+                # node-level state diffs — useful for tracing graph progress
+                yield {"event": "update", "data": json.dumps({
+                    "namespace": list(ns),
+                    "nodes": list(payload.keys()),
+                })}
+
+            elif mode == "custom":
+                # anything emitted via get_stream_writer()
+                yield {"event": "custom", "data": json.dumps(payload, default=str)}
+
+            # "values" intentionally ignored — it's the full state after each step
+            # and would duplicate everything else. Re-enable if you want it.
+
+        yield {"event": "done", "data": "{}"}
+    except Exception as e:
+        print(e)
+        # log server-side, return sanitized
+        yield {"event": "error", "data": json.dumps({"message": "Internal error"})}
+
+
+@app.post("/stream")
+async def stream(request:Request, req: InvokeRequest, agent:DependsAgent):
+    return EventSourceResponse(
+        content=_event_gen(request, req.message, req.session_id, agent)
+    )

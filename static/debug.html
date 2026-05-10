@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Agent Debug</title>
+<style>
+  body {
+    max-width: 800px;
+    margin: 1rem auto;
+    padding: 0 1rem;
+    background: #fafafa;
+  }
+  #log {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    padding: 0.75rem;
+    height: 60vh;
+    overflow-y: auto;
+    margin-bottom: 0.75rem;
+  }
+  .entry {
+    border: 1px solid #eee;
+    border-radius: 4px;
+    padding: 0.5rem 0.6rem;
+    margin-bottom: 0.4rem;
+    background: #fcfcfc;
+  }
+  .entry.user      { background: #eef4ff; border-color: #d6e3f7; }
+  .entry.assistant { background: #f3f8f2; border-color: #d8e7d4; }
+  .entry.tool_call   { background: #fff8e6; border-color: #ecdcae; }
+  .entry.tool_result { background: #fff1e0; border-color: #ecc9a3; }
+  .entry.update      { background: #f0f0f0; border-color: #ddd; color: #666; font-size: 0.85em; }
+  .entry.error       { background: #fde8e8; border-color: #f3b8b8; }
+  .entry.done        { background: #f0f0f0; border-color: #ddd; color: #888; font-size: 0.85em; }
+  .label {
+    font-weight: bold;
+    font-size: 0.8em;
+    text-transform: uppercase;
+    color: #555;
+    margin-bottom: 0.2rem;
+  }
+  .body { white-space: pre-wrap; word-wrap: break-word; }
+  #form {
+    display: flex;
+    gap: 0.5rem;
+  }
+  #input {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  button {
+    padding: 0.5rem 1rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #f0f0f0;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+</style>
+</head>
+<body>
+
+<h2>Agent Debug</h2>
+
+<div id="log"></div>
+
+<form id="form">
+  <input id="input" type="text" placeholder="Say something..." autocomplete="off" required>
+  <button type="submit" id="send">Send</button>
+</form>
+
+<script>
+const SESSION_ID = crypto.randomUUID();
+const log = document.getElementById("log");
+const form = document.getElementById("form");
+const input = document.getElementById("input");
+const send = document.getElementById("send");
+
+function addEntry(cls, label, text) {
+  const div = document.createElement("div");
+  div.className = "entry " + cls;
+  const l = document.createElement("div");
+  l.className = "label";
+  l.textContent = label;
+  const b = document.createElement("div");
+  b.className = "body";
+  b.textContent = text;
+  div.appendChild(l);
+  div.appendChild(b);
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return b;  // return body element so we can append to it
+}
+
+// SSE parser over fetch streaming
+async function* parseSSE(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    // Normalize CRLF to LF so we only have to handle one case
+    buf = buf.replace(/\r\n/g, "\n");
+
+    let idx;
+    while ((idx = buf.indexOf("\n\n")) !== -1) {
+      const raw = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      let event = null;
+      const dataLines = [];
+      for (const line of raw.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+      }
+      if (event && dataLines.length) {
+        yield { event, data: JSON.parse(dataLines.join("\n")) };
+      }
+    }
+  }
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = "";
+  send.disabled = true;
+
+  addEntry("user", "user", message);
+
+  // The current assistant "bubble" — created lazily on first token,
+  // reset whenever a non-token event arrives so the next token batch
+  // starts a fresh entry. This keeps streamed text grouped per turn.
+  let assistantBody = null;
+
+  try {
+    const resp = await fetch("/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, session_id:SESSION_ID }),
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+
+    for await (const { event, data } of parseSSE(resp)) {
+      if (event === "token") {
+        if (!assistantBody) assistantBody = addEntry("assistant", "assistant", "");
+        assistantBody.textContent += data.text;
+        log.scrollTop = log.scrollHeight;
+      } else {
+        assistantBody = null;  // next token starts a new bubble
+        if (event === "tool_call") {
+          addEntry("tool_call", "tool call",
+            `${data.name || "(empty)"}(${JSON.stringify(data.args)})`);
+        } else if (event === "tool_result") {
+          addEntry("tool_result", "tool result → " + data.name, data.content);
+        } else if (event === "update") {
+          addEntry("update", "update",
+            `${data.nodes.join(", ")}  ${data.namespace.length ? "[" + data.namespace.join("/") + "]" : ""}`);
+        } else if (event === "custom") {
+          addEntry("update", "custom", JSON.stringify(data));
+        } else if (event === "error") {
+          addEntry("error", "error", data.message);
+        } else if (event === "done") {
+          addEntry("done", "done", "");
+        }
+      }
+    }
+  } catch (err) {
+    addEntry("error", "error", String(err));
+  } finally {
+    send.disabled = false;
+    input.focus();
+  }
+});
+
+input.focus();
+</script>
+</body>
+</html>
