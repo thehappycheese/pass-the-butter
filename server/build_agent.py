@@ -9,6 +9,7 @@ from .tools.toy_business import (
     find_employee,
     get_budget,
     get_department,
+    update_budget,
 )
 
 BuildAgentResult = CompiledStateGraph[MessagesState, None, MessagesState, MessagesState]
@@ -23,6 +24,7 @@ def build_agent(llm:BaseChatModel) -> BuildAgentResult:
             find_employee,
             get_budget,
             get_department,
+            update_budget,
         ],
         name="agent",
     )

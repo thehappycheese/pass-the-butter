@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import  FastAPI, Request
 from fastapi.responses import FileResponse, StreamingResponse
+from langgraph.types import Command
 from langgraph.graph import MessagesState
 from pydantic import BaseModel
 
@@ -31,9 +32,13 @@ class InvokeRequest(BaseModel):
     session_id: str
 
 
-async def _event_gen(request: Request, message: str, session_id:str, agent: DependsAgent):
+async def _event_gen(
+    request: Request,
+    inputs: MessagesState | Command,
+    session_id: str,
+    agent: DependsAgent,
+):
     config:RunnableConfig = {"configurable": {"thread_id": session_id}}
-    inputs = MessagesState(messages=[HumanMessage(content=message)])
     try:
         async for ns, mode, payload in agent.astream(
             inputs,
@@ -85,16 +90,35 @@ async def _event_gen(request: Request, message: str, session_id:str, agent: Depe
 
             # "values" intentionally ignored — it's the full state after each step
             # and would duplicate everything else. Re-enable if you want it.
-
-        yield {"event": "done", "data": "{}"}
+        state = await agent.aget_state(config)
+        if state.interrupts:
+            interrupt_data = state.interrupts[0].value  # the dict you passed to interrupt()
+            yield {"event": "approval_required", "data": json.dumps(interrupt_data)}
+        else:
+            yield {"event": "done", "data": "{}"}
     except Exception as e:
         print(e)
         # log server-side, return sanitized
         yield {"event": "error", "data": json.dumps({"message": "Internal error"})}
 
 
+
+
 @app.post("/stream")
-async def stream(request:Request, req: InvokeRequest, agent:DependsAgent):
+async def stream(request: Request, req: InvokeRequest, agent: DependsAgent):
+    inputs = MessagesState(messages=[HumanMessage(content=req.message)])
     return EventSourceResponse(
-        content=_event_gen(request, req.message, req.session_id, agent)
+        content=_event_gen(request, inputs, req.session_id, agent)
+    )
+
+class ResumeRequest(BaseModel):
+    session_id: str
+    approved: bool
+    reason: str | None = None
+
+@app.post("/resume")
+async def resume(request: Request, req: ResumeRequest, agent: DependsAgent):
+    inputs = Command(resume={"approved": req.approved, "reason": req.reason})
+    return EventSourceResponse(
+        content=_event_gen(request, inputs, req.session_id, agent)
     )

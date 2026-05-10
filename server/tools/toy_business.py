@@ -1,3 +1,4 @@
+from langgraph.types import interrupt
 from langchain_core.tools import tool
 import asyncio
 
@@ -60,4 +61,21 @@ async def get_budget(budget_id: str) -> dict:
     record = _BUDGETS.get(budget_id.strip().upper())
     if not record:
         return {"error": f"No budget found with id '{budget_id}'."}
+    return record
+
+@tool
+async def update_budget(budget_id:str, new_allocated_amount:int)->dict:
+    """set the specified budget's allocated amount field. returns the updated record if successful, or an error otherwise."""
+    decision = interrupt({
+        "type": "approval_required",
+        "tool": "update_budget",
+        "args": {"budget_id": budget_id, "new_allocated_amount": new_allocated_amount},
+    })
+    if not decision.get("approved"):
+        return {"error": "Update rejected by user.", "reason": decision.get("reason")}
+    await asyncio.sleep(0.3)
+    record = _BUDGETS.get(budget_id.strip().upper())
+    if not record:
+        return {"error": f"No budget found with id '{budget_id}'."}
+    record["allocated"] = new_allocated_amount
     return record
