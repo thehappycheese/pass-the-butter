@@ -45,48 +45,54 @@ async def _event_gen(
             stream_mode=[
                 "messages",
                 "updates",
-                "custom"
+                "custom",
+
             ],
             subgraphs=True,
             config=config,
         ):
             if await request.is_disconnected():
                 break
-
-            if mode == "messages":
-                chunk, _meta = payload
-                match chunk:
-                    case AIMessageChunk(content=str() as text) if text:
-                        yield {"event": "token", "data": json.dumps({"text": text})}
-                    case AIMessageChunk(content=list() as blocks):
-                        for block in blocks:
-                            if isinstance(block, dict) and (text := block.get("text")):
-                                yield {"event": "token", "data": json.dumps({"text": text})}
-                    case ToolMessage(name=name, content=content):
-                        yield {"event": "tool_result", "data": json.dumps({
-                            "name": name, "content": str(content),
-                        })}
-                # NOTE: no tool_call emission here — handled in `updates`
-
-            elif mode == "updates":
-                if not ns:  # skip root-graph updates; they replay subgraph output
-                    continue
-                for node_name, node_output in payload.items():
-                    if not isinstance(node_output, dict):
-                        continue
-                    for m in node_output.get("messages", []):
-                        for tc in getattr(m, "tool_calls", None) or []:
-                            yield {"event": "tool_call", "data": json.dumps({
-                                "name": tc["name"],
-                                "args": tc["args"],
+            match mode:
+                case "messages":
+                    chunk, _meta = payload
+                    match chunk:
+                        case AIMessageChunk(content=str() as text) if text:
+                            yield {"event": "token", "data": json.dumps({"text": text})}
+                        case AIMessageChunk(content=list() as blocks):
+                            for block in blocks:
+                                if isinstance(block, dict) and (text := block.get("text")):
+                                    yield {"event": "token", "data": json.dumps({"text": text})}
+                        case ToolMessage(name=name, content=content):
+                            yield {"event": "tool_result", "data": json.dumps({
+                                "name": name, "content": str(content),
                             })}
+                        case x:
+                            print(f"unhandled messages case {x}")
+                    # NOTE: no tool_call emission here — handled in `updates`
 
-            elif mode == "custom":
-                yield {"event": "custom", "data": json.dumps(payload, default=str)}
+                case "updates":
+                    if not ns:  # skip root-graph updates; they replay subgraph output
+                        continue
+                    for node_name, node_output in payload.items():
+                        if not isinstance(node_output, dict):
+                            continue
+                        for m in node_output.get("messages", []):
+                            for tc in getattr(m, "tool_calls", None) or []:
+                                yield {"event": "tool_call", "data": json.dumps({
+                                    "name": tc["name"],
+                                    "args": tc["args"],
+                                })}
 
-            elif mode == "custom":
-                # anything emitted via get_stream_writer()
-                yield {"event": "custom", "data": json.dumps(payload, default=str)}
+                case "custom":
+                    yield {"event": "custom", "data": json.dumps(payload, default=str)}
+
+                case "custom":
+                    # anything emitted via get_stream_writer()
+                    yield {"event": "custom", "data": json.dumps(payload, default=str)}
+                case x:
+                    print(f"unhandled case {x}")
+
 
             # "values" intentionally ignored — it's the full state after each step
             # and would duplicate everything else. Re-enable if you want it.
