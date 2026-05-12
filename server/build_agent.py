@@ -9,6 +9,7 @@ from .tools.toy_business import (
     find_employee,
     get_budget,
     get_department,
+    list_all_employees,
     update_budget,
 )
 
@@ -25,8 +26,10 @@ def build_agent(llm:BaseChatModel) -> BuildAgentResult:
             get_budget,
             get_department,
             update_budget,
+            list_all_employees,
         ],
         name="agent",
+        system_prompt="you are a helpful assistant. You respond in simple plaintext, not markdown. You keep your responses short but complete with brief explanations when tools were used."
     )
 
     graph = StateGraph(MessagesState)

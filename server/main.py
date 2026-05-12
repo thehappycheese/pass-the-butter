@@ -1,9 +1,10 @@
 
 import json
 from pathlib import Path
+from typing import Literal
 
 from fastapi import  FastAPI, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from langgraph.types import Command
 from langgraph.graph import MessagesState
 from pydantic import BaseModel
@@ -15,17 +16,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from .lifespan import lifespan, DependsAgent
 
-
 app = FastAPI(title="Butter Agent", lifespan=lifespan)
-
 
 STATIC_DIR = Path("static").resolve()
 assert STATIC_DIR.is_dir()
-assert (STATIC_DIR/"debug.html").is_file()
 
-@app.get("/")
-async def debug_page():
-    return FileResponse(STATIC_DIR / "debug.html")
+app.mount("/debug", StaticFiles(directory="static"), name="static")
 
 class InvokeRequest(BaseModel):
     message: str
@@ -46,7 +42,6 @@ async def _event_gen(
                 "messages",
                 "updates",
                 "custom",
-
             ],
             subgraphs=True,
             config=config,
@@ -63,10 +58,15 @@ async def _event_gen(
                             for block in blocks:
                                 if isinstance(block, dict) and (text := block.get("text")):
                                     yield {"event": "token", "data": json.dumps({"text": text})}
-                        case ToolMessage(name=name, content=content):
-                            yield {"event": "tool_result", "data": json.dumps({
-                                "name": name, "content": str(content),
-                            })}
+                        case ToolMessage(name=name, content=content, tool_call_id=tool_call_id):
+                            yield {
+                                "event": "tool_result",
+                                "data": json.dumps({
+                                    "name": name,
+                                    "content": str(content),
+                                    "id":tool_call_id
+                                })
+                            }
                         case x:
                             print(f"unhandled messages case {x}")
                     # NOTE: no tool_call emission here — handled in `updates`
@@ -74,21 +74,19 @@ async def _event_gen(
                 case "updates":
                     if not ns:  # skip root-graph updates; they replay subgraph output
                         continue
-                    for node_name, node_output in payload.items():
-                        if not isinstance(node_output, dict):
-                            continue
-                        for m in node_output.get("messages", []):
-                            for tc in getattr(m, "tool_calls", None) or []:
-                                yield {"event": "tool_call", "data": json.dumps({
-                                    "name": tc["name"],
-                                    "args": tc["args"],
-                                })}
+                    if isinstance(payload,dict):
+                        for node_name, node_output in payload.items():
+                            if not isinstance(node_output, dict):
+                                continue
+                            for m in node_output.get("messages", []):
+                                for tc in getattr(m, "tool_calls", None) or []:
+                                    yield {"event": "tool_call", "data": json.dumps({
+                                        "id":tc["id"],
+                                        "name": tc["name"],
+                                        "args": tc["args"],
+                                    })}
 
                 case "custom":
-                    yield {"event": "custom", "data": json.dumps(payload, default=str)}
-
-                case "custom":
-                    # anything emitted via get_stream_writer()
                     yield {"event": "custom", "data": json.dumps(payload, default=str)}
                 case x:
                     print(f"unhandled case {x}")

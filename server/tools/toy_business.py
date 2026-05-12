@@ -31,6 +31,13 @@ _BUDGETS = {
 
 # ---- Tools --------------------------------------------------------------
 
+
+@tool
+async def list_all_employees() -> list[str]:
+    """Lists all employees"""
+    await asyncio.sleep(0.3)
+    return list(_EMPLOYEES.keys())
+
 @tool
 async def find_employee(name: str) -> dict:
     """Look up an employee by first name (case-insensitive).
