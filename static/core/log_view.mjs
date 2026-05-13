@@ -1,5 +1,13 @@
 import { Queue } from "./queue.mjs";
 
+/**
+ * 
+ * @param {string} name name of the function
+ * @param {Record<string,any>} args Named Arguments passed to the function
+ * @returns A formatted multi line string that looks more like a python function call than json
+ */
+const function_format = (name, args)=>
+    `${name}${Object.keys(args).length === 0 ? '()' : `(\n${Object.entries(args).map(([k, v]) => `  ${k} = ${JSON.stringify(v)},`).join("\n")}\n)`}`
 
 
 class MessageDom {
@@ -28,6 +36,8 @@ export class LogView {
      */
     train_of_thunk;
 
+    /** @type {boolean} if the think() method is currently working this internal flag stops it from retriggering */
+    thinking;
     /**
      * @type {MessageDom[]}
      */
@@ -46,10 +56,15 @@ export class LogView {
      */
     constructor(host) {
         this.train_of_thought = [];
+        this.thinking = false;
         this.message_log = [];
         this.tool_calls = {};
         this.train_of_thunk = new Queue();
         this.host = host;
+    }
+
+    scroll_bottom(){
+        this.host.scrollTop = this.host.scrollHeight;
     }
 
     /**
@@ -62,7 +77,7 @@ export class LogView {
         const dom = this.add_entry(
             "tool_call",
             "Tool Call",
-            `${name}${Object.keys(args).length === 0 ? '()' : `(\n${Object.entries(args).map(([k, v]) => `  ${k} = ${JSON.stringify(v)},`).join("\n")}\n)`}`
+            function_format(name, args)
         );
         this.tool_calls[id] = dom;
         return dom
@@ -81,8 +96,53 @@ export class LogView {
         )
         dom.body.textContent += "\n\n"
         dom.body.textContent += "Result: "+message
-        this.host.scrollTop = this.host.scrollHeight;
+        this.scroll_bottom();
         return dom
+    }
+
+    /**
+     * 
+     * @param {string} id tool call id
+     * @param {string} message 
+     * @param {(approved:boolean) => void } resume
+     */
+    add_request_for_approval(id, message, resume){
+        const dom = this.tool_calls?.[id] ?? this.add_tool_call(
+            id,
+            `unknown (Requerst for Approval looked for tool call id ${id}`,
+            {}
+        )
+        dom.body.textContent += "\n\n"
+        
+        const approval_form = document.createElement("div")
+        approval_form.className = "approval_form";
+        dom.body.appendChild(approval_form)
+
+        approval_form.textContent += "Request For Approval:\n\n" + message+"\n";
+
+        const approve_button = document.createElement("button");
+        approve_button.textContent = "APPROVE"
+        const deny_button = document.createElement("button");
+        deny_button.textContent = "DENY"
+
+        approval_form.appendChild(approve_button);
+        approval_form.appendChild(deny_button);
+
+        const on_approve = ()=>{
+            approval_form.remove();
+            resume(true);
+            dom.body.textContent += "User Action: APPROVED TOOL CALL";
+            this.think({resume})
+        }
+        const on_deny = ()=>{
+            approval_form.remove();
+            resume(false);
+            dom.body.textContent += "User Action: DENIED TOOL CALL";
+            this.think({resume})
+        }
+        approve_button.addEventListener("pointerdown",on_approve)
+        deny_button.addEventListener("pointerdown",on_deny)
+        this.scroll_bottom();
     }
 
     /**
@@ -103,7 +163,7 @@ export class LogView {
         div.appendChild(b);
 
         this.host.appendChild(div);
-        this.host.scrollTop = this.host.scrollHeight;
+        this.scroll_bottom();
 
         const msg_dom = new MessageDom(div, l, b);
 
@@ -136,7 +196,7 @@ export class LogView {
                     assistant_body = this.add_entry("assistant", "assistant", "");
                 }
                 assistant_body.body.textContent += data.text;
-                this.host.scrollTop = this.host.scrollHeight;
+                this.scroll_bottom();
             } else {
                 assistant_body = null;  // next token starts a new bubble
                 if (event === "tool_call") {
@@ -157,22 +217,12 @@ export class LogView {
                 } else if (event === "done") {
                     this.add_entry("done", "done", "");
                 } else if (event === "approval_required") {
-
-                    const { tool, args } = data;
-                    this.add_entry(
-                        "approval_request",
-                        "approval request",
-                        `${tool}(\n${Object.entries(args).map(([k, v]) => `  ${k} = ${v},`).join("\n")}${Object.keys(args).length > 0 ? '\n' : ''})`
-                    );
-
-                    const approved = confirm(`Approve ${tool}(${JSON.stringify(args)})?`);
-
-                    this.add_entry(
-                        approved ? "approval_response_positive" : "approval_response_negative",
-                        "approval",
-                        approved ? "APPROVED" : "NOT APPROVED"
-                    );
-                    resume( approved );
+                    const { tool, args, tool_call_id } = data;
+                    this.add_request_for_approval(
+                        tool_call_id,
+                        function_format(tool, args),
+                        resume,
+                    )
                 } else {
                     this.add_entry("unknown", "event", JSON.stringify(data));
                 }
@@ -184,6 +234,10 @@ export class LogView {
      *  @param {{resume:(approved:boolean)=>void}} options
      */
     async think({ resume }) {
+        if (this.thinking) {
+            return
+        }
+        this.thinking = true;
         while (this.train_of_thunk.not_empty()) {
             const next = this.train_of_thunk.dequeue();
             if (!next) break;
@@ -192,5 +246,6 @@ export class LogView {
                 { resume }
             );
         }
+        this.thinking = false;
     }
 }

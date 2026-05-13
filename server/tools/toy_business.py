@@ -1,5 +1,7 @@
+from typing import Annotated
+
 from langgraph.types import interrupt
-from langchain_core.tools import tool
+from langchain_core.tools import tool, InjectedToolCallId
 import asyncio
 
 # ---- Toy data (hardcoded) -----------------------------------------------
@@ -71,12 +73,17 @@ async def get_budget(budget_id: str) -> dict:
     return record
 
 @tool
-async def update_budget(budget_id:str, new_allocated_amount:int)->dict:
+async def update_budget(
+    budget_id:str,
+    new_allocated_amount:int,
+    tool_call_id: Annotated[str, InjectedToolCallId]
+)->dict:
     """set the specified budget's allocated amount field. returns the updated record if successful, or an error otherwise."""
     decision = interrupt({
         "type": "approval_required",
         "tool": "update_budget",
         "args": {"budget_id": budget_id, "new_allocated_amount": new_allocated_amount},
+        "tool_call_id":tool_call_id
     })
     if not decision.get("approved"):
         return {"error": "Update rejected by user.", "reason": decision.get("reason")}

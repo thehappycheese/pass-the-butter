@@ -10,11 +10,14 @@
 
     <body>
         <h2>Agent Debug</h2>
-        <div id="log"></div>
+        <div id="log">
+            <button onclick="document.querySelector('#input').value=event.target.innerText;document.querySelector('#send').click();event.target.remove();">Please add 10k to budget B-2026-01</button>
+        </div>
         <form id="form">
             <input id="input" type="text" placeholder="Say something..." autocomplete="off" required>
             <button type="submit" id="send">Send</button>
         </form>
+        
     </body>
 
 </html>

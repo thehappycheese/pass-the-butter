@@ -18,6 +18,14 @@ from .lifespan import lifespan, DependsAgent
 
 app = FastAPI(title="Butter Agent", lifespan=lifespan)
 
+
+@app.middleware("http")
+async def add_no_cache_header(request: Request, call_next):
+    response = await call_next(request)
+    # Force browser to not cache and revalidate
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
 STATIC_DIR = Path("static").resolve()
 assert STATIC_DIR.is_dir()
 

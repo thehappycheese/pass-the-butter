@@ -43,18 +43,20 @@ form?.addEventListener("submit", async (e) => {
 
     try {
         await logview.think({
-            resume: (approved) => logview.train_of_thunk.enqueue(async () => {
-                const response = await fetch("/resume", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        session_id: SESSION_ID,
-                        approved
-                    }),
-                });
-                if (!response.ok) throw new Error("HTTP " + response.status);
-                return iter_sse(response)
-            })
+            resume: (approved) => {
+                logview.train_of_thunk.enqueue(async () => {
+                    const response = await fetch("/resume", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            session_id: SESSION_ID,
+                            approved
+                        }),
+                    });
+                    if (!response.ok) throw new Error("HTTP " + response.status);
+                    return iter_sse(response)
+                })
+            }
         });
     // } catch (err) {
     //     logview.add_entry("error", "error", String(err));
