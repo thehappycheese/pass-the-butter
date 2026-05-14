@@ -143,6 +143,7 @@ export class LogView {
         approve_button.addEventListener("pointerdown",on_approve)
         deny_button.addEventListener("pointerdown",on_deny)
         this.scroll_bottom();
+        return dom;
     }
 
     /**

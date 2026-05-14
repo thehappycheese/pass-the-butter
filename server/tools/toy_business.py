@@ -80,7 +80,6 @@ async def update_budget(
 )->dict:
     """set the specified budget's allocated amount field. returns the updated record if successful, or an error otherwise."""
     decision = interrupt({
-        "type": "approval_required",
         "tool": "update_budget",
         "args": {"budget_id": budget_id, "new_allocated_amount": new_allocated_amount},
         "tool_call_id":tool_call_id
@@ -93,3 +92,5 @@ async def update_budget(
         return {"error": f"No budget found with id '{budget_id}'."}
     record["allocated"] = new_allocated_amount
     return record
+
+

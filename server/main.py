@@ -1,9 +1,9 @@
 
 import json
 from pathlib import Path
-from typing import Literal
 
 from fastapi import  FastAPI, Request
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from langgraph.types import Command
 from langgraph.graph import MessagesState
@@ -31,9 +31,9 @@ assert STATIC_DIR.is_dir()
 
 app.mount("/debug", StaticFiles(directory="static"), name="static")
 
-class InvokeRequest(BaseModel):
-    message: str
-    session_id: str
+@app.get("/")
+async def redirect():
+    return RedirectResponse(url="/debug/index.html")
 
 
 async def _event_gen(
@@ -104,8 +104,9 @@ async def _event_gen(
             # and would duplicate everything else. Re-enable if you want it.
         state = await agent.aget_state(config)
         if state.interrupts:
-            interrupt_data = state.interrupts[0].value  # the dict you passed to interrupt()
-            yield {"event": "approval_required", "data": json.dumps(interrupt_data)}
+            for interrupt in state.interrupts:
+                interrupt_data = interrupt.value  # the dict you passed to interrupt()
+                yield {"event": "approval_required", "data": json.dumps(interrupt_data)}
         else:
             yield {"event": "done", "data": "{}"}
     except Exception as e:
@@ -114,13 +115,19 @@ async def _event_gen(
         yield {"event": "error", "data": json.dumps({"message": "Internal error"})}
 
 
-
+class StreamRequest(BaseModel):
+    message: str
+    session_id: str
 
 @app.post("/stream")
-async def stream(request: Request, req: InvokeRequest, agent: DependsAgent):
-    inputs = MessagesState(messages=[HumanMessage(content=req.message)])
+async def stream(
+    request: Request,
+    body: StreamRequest,
+    agent: DependsAgent
+):
+    inputs = MessagesState(messages=[HumanMessage(content=body.message)])
     return EventSourceResponse(
-        content=_event_gen(request, inputs, req.session_id, agent)
+        content=_event_gen(request, inputs, body.session_id, agent)
     )
 
 class ResumeRequest(BaseModel):
@@ -129,8 +136,8 @@ class ResumeRequest(BaseModel):
     reason: str | None = None
 
 @app.post("/resume")
-async def resume(request: Request, req: ResumeRequest, agent: DependsAgent):
-    inputs = Command(resume={"approved": req.approved, "reason": req.reason})
+async def resume(request: Request, body: ResumeRequest, agent: DependsAgent):
+    inputs = Command(resume={"approved": body.approved, "reason": body.reason})
     return EventSourceResponse(
-        content=_event_gen(request, inputs, req.session_id, agent)
+        content=_event_gen(request, inputs, body.session_id, agent)
     )
