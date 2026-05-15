@@ -5,23 +5,24 @@
         <meta charset="UTF-8">
         <title>NAgent</title>
         <link rel="stylesheet" href="style.css" />
-        <script src="index.mjs" type="module" defer></script>
+        <script src="dist/index.js" type="module" defer></script>
     </head>
 
     <body>
         <div class="tile-overlay"></div>
+        
         <div style="position:relative; height:10em;">
             <h2>NAgent</h2>
             <img src="img/logoman.svg" style="opacity: 0.7;position:absolute;top:-1em;right:1em; height:13em;"/>
         </div>
+
         <div id="log">
-            
         </div>
+
         <form id="form">
             <input id="input" type="text" placeholder="Say something..." autocomplete="off" required>
             <button type="submit" id="send">Send</button>
         </form>
-        
-    </body>
 
+    </body>
 </html>

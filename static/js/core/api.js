@@ -1,4 +1,4 @@
-import { iter_sse } from "./sse.mjs";
+import { iter_sse } from "../util/sse.js";
 
 /**
  * @param {string} user_message 
@@ -18,7 +18,7 @@ export async function endpoint_stream (user_message, session_id){
 }
 
 /**
- * @param {Record<string, import("./log_view.mjs").ApprovalStateResolved>} approvals
+ * @param {Record<string, import("./log_view.js").ApprovalStateResolved>} approvals
  * @param {string} session_id
  */
 export async function endpoint_resume(approvals, session_id){

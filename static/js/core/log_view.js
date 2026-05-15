@@ -1,5 +1,5 @@
-import { Queue } from "./queue.mjs";
-import { h } from "./hyperscript.mjs";
+import { Queue } from "../util/queue.js";
+import { h } from "../util/hyperscript.js";
 
 /**
  * 
@@ -77,7 +77,7 @@ export class LogView {
     resume;
 
     /**
-     * @type {Queue<() => Promise<import("./sse.mjs").AsyncIterSSE>>} Thunks that will be thought
+     * @type {Queue<() => Promise<import("../util/sse.js").AsyncIterSSE>>} Thunks that will be thought
      */
     train_of_thunk;
 

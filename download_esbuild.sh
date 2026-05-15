@@ -1,0 +1,1 @@
+curl -sL https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.28.0.tgz | tar -xz --strip-components=2 -C . package/bin/esbuild
