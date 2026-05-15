@@ -26,7 +26,6 @@ async def increment_dummy_counter(
         "args": {},
         "tool_call_id":tool_call_id
     })
-    print(decision)
     if not decision.get("approved"):
         return ToolCallDenied(reason="The user did not approve this tool call.")
     await asyncio.sleep(0.3)

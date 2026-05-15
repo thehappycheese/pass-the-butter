@@ -18,7 +18,7 @@ export async function endpoint_stream (user_message, session_id){
 }
 
 /**
- * @param {Record<string, boolean>} approvals
+ * @param {Record<string, import("./log_view.mjs").ApprovalStateResolved>} approvals
  * @param {string} session_id
  */
 export async function endpoint_resume(approvals, session_id){

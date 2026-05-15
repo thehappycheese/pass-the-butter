@@ -145,51 +145,52 @@ export class LogView {
             "unknown",
             {}
         )
-        dom.body.textContent += "\n\n"
-        dom.body.textContent += "Result: " + message
+        
+        dom.body.appendChild(h("div",{class:"tool_call_result"},"Result: "+message))
         this.scroll_bottom();
         return dom
     }
 
     /**
      * 
-     * @param {string} tool_call_id tool call id
-     * @param {string} message 
+     * @param {string} tool_call_id
      */
-    add_request_for_approval(tool_call_id, message) {
+    add_request_for_approval(tool_call_id) {
         const dom = this.tool_calls?.[tool_call_id] ?? this.add_tool_call(
             tool_call_id,
             `unknown (Request for Approval looked for tool call id ${tool_call_id})`,
             {}
         )
-        dom.body.textContent += "\n\n"
-
-        const approval_form = document.createElement("div")
-        approval_form.className = "approval_form";
-        dom.body.appendChild(approval_form)
-
-        approval_form.textContent += "Request For Approval:\n\n" + message + "\n";
-
-        const approve_button = document.createElement("button");
-        approve_button.textContent = "APPROVE"
-        const deny_button = document.createElement("button");
-        deny_button.textContent = "DENY"
-
-        approval_form.appendChild(approve_button);
-        approval_form.appendChild(deny_button);
 
         const on_approve = () => {
             approval_form.remove();
             this.set_approval_result(tool_call_id, true);
-            dom.body.textContent += "User Action: APPROVED TOOL CALL";
+            dom.body.append(h("div",{class:"approval_form_user_approved"},
+                "User Action: APPROVED TOOL CALL"));
         }
         const on_deny = () => {
             approval_form.remove();
             this.set_approval_result(tool_call_id, false);
-            dom.body.textContent += "User Action: DENIED TOOL CALL";
+            dom.body.append(h("div",{class:"approval_form_user_denied"},
+                "User Action: DENIED TOOL CALL"));
         }
-        approve_button.addEventListener("click", on_approve)
-        deny_button.addEventListener("click", on_deny)
+
+        const approval_form = h("div", {
+            class:"approval_form",
+        },[
+            h("div",{},"Allow this tool to run:"),
+            h("div",{
+                style:{
+                    display:"flex",
+                    gap:"2em",
+                }
+            },[
+                h("button",{on:{click:on_approve}},"YES"),
+                h("button",{on:{click:on_deny}},"NO")
+            ])
+        ])
+
+        dom.body.appendChild(approval_form);
         this.scroll_bottom();
         return dom;
     }
@@ -236,16 +237,10 @@ export class LogView {
      * @param {string} text body content
      */
     add_entry(cls, label, text) {
-        const div = document.createElement("div");
-        div.className = "entry " + cls;
-        const l = document.createElement("div");
-        l.className = "label";
-        l.textContent = label;
-        const b = document.createElement("div");
-        b.className = "body";
-        b.textContent = text;
-        div.appendChild(l);
-        div.appendChild(b);
+
+        const l = h("div", { class: "label" }, label);
+        const b = h("div", { class: "body" }, text);
+        const div = h("div", { class: ["entry", cls] }, [l,b]);
 
         this.host.appendChild(div);
         this.scroll_bottom();
@@ -295,7 +290,6 @@ export class LogView {
                     this.init_approval(tool_call_id, interrupt_id);
                     this.add_request_for_approval(
                         tool_call_id,
-                        function_format(tool, args),
                     )
                 } else {
                     this.add_entry("unknown", "event", JSON.stringify(data));
