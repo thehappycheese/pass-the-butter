@@ -1,5 +1,5 @@
 ./esbuild \
-    --bundle static/index.ts \
+    --bundle static/js/index.ts \
     --outdir=static/dist \
     --sourcemap \
     --watch
