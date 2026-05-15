@@ -90,17 +90,7 @@ h2 {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    text-align: center;
-}
-
-h2::after {
-    content: '';
-    display: block;
-    width: 60px;
-    height: 3px;
-    margin: 0.75rem auto 0;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    border-radius: 2px;
+    text-align: left;
 }
 
 #log {

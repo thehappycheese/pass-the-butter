@@ -1,9 +1,13 @@
 
+import os
+
+from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
-from langchain.agents import create_agent
+from langchain.agents import create_agent, AgentState
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import SecretStr
 
 from .tools.dummy_counter import increment_dummy_counter
 
@@ -20,7 +24,16 @@ BuildAgentResult = CompiledStateGraph[MessagesState, None, MessagesState, Messag
 # TODO place this on the API of the function below.
 checkpointer = InMemorySaver()
 
-def build_agent(llm:BaseChatModel) -> BuildAgentResult:
+def build_agent() -> BuildAgentResult:
+    
+    llm = ChatAnthropic(
+        model_name="claude-opus-4-5",
+        api_key=SecretStr(os.environ["ANTHROPIC_API_KEY"]),
+        timeout=60*2,
+        stop=None,
+        streaming=True,
+    )
+
     agent = create_agent(
         model=llm,
         tools=[
@@ -32,7 +45,7 @@ def build_agent(llm:BaseChatModel) -> BuildAgentResult:
             increment_dummy_counter
         ],
         name="agent",
-        system_prompt="you are a helpful assistant. You respond in simple plaintext, not markdown. You keep your responses short but complete with brief explanations when tools were used."
+        system_prompt="you are a helpful assistant. You respond in simple plaintext, not markdown. You keep your responses short but complete with brief explanations when tools were used.",
     )
 
     graph = StateGraph(MessagesState)

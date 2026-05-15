@@ -1,6 +1,7 @@
 "use strict";
 import { iter_sse } from "./core/sse.mjs";
 import { LogView } from "./core/log_view.mjs";
+import { endpoint_resume, endpoint_stream } from "./core/api.mjs";
 
 const SESSION_ID = crypto.randomUUID();
 
@@ -13,7 +14,17 @@ const input = document.getElementById("input");
 /** @type {HTMLButtonElement} */
 const send = document.getElementById("send");
 
-const logview = new LogView(log);
+
+
+
+const logview = new LogView(
+    log,
+    (approvals) => {
+        logview.train_of_thunk.enqueue(async () => 
+            await  endpoint_resume(approvals, SESSION_ID)
+        )
+    }
+);
 
 /**
  * 
@@ -35,7 +46,7 @@ function add_suggested_questions(host, set_value){
         const button = document.createElement("button");
         button.textContent = value;
         sb.appendChild(button);
-        button.addEventListener("pointerdown",()=>{
+        button.addEventListener("click",()=>{
             controller.abort()
             sb.remove()
             set_value(value)
@@ -88,43 +99,10 @@ form?.addEventListener("submit", async (e) => {
     if (!message) return;
     input.value = "";
     send.disabled = true;
-
     logview.add_entry("user", "user", message);
-
-    // The current assistant "bubble" — created lazily on first token,
-    // reset whenever a non-token event arrives so the next token batch
-    // starts a fresh entry. This keeps streamed text grouped per turn.
-
-    logview.train_of_thunk.enqueue(async () => {
-        const response = await fetch("/stream", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                message,
-                session_id: SESSION_ID
-            }),
-        });
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        return iter_sse(response)
-    });
-
+    logview.train_of_thunk.enqueue(async () => await endpoint_stream(message, SESSION_ID));
     try {
-        await logview.think({
-            resume: (approved) => {
-                logview.train_of_thunk.enqueue(async () => {
-                    const response = await fetch("/resume", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            session_id: SESSION_ID,
-                            approved
-                        }),
-                    });
-                    if (!response.ok) throw new Error("HTTP " + response.status);
-                    return iter_sse(response)
-                })
-            }
-        });
+        await logview.think();
     // } catch (err) {
     //     logview.add_entry("error", "error", String(err));
     } finally {

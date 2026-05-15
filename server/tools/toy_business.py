@@ -84,6 +84,7 @@ async def update_budget(
         "args": {"budget_id": budget_id, "new_allocated_amount": new_allocated_amount},
         "tool_call_id":tool_call_id
     })
+    print(decision)
     if not decision.get("approved"):
         return {"error": "Update rejected by user.", "reason": decision.get("reason")}
     await asyncio.sleep(0.3)

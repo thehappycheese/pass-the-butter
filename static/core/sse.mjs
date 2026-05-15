@@ -1,6 +1,15 @@
+/** 
+ * @typedef {object} SSEEvent 
+ * @property {string} event
+ * @property {any} data
+*/
 /**
- * SSE parser over fetch streaming
- * @param response {Response}
+ * @typedef {AsyncGenerator<SSEEvent, void, unknown>} AsyncIterSSE
+ */
+
+/**
+ * @param {Response} response
+ * @returns {AsyncIterSSE}
  */
 export async function* iter_sse(response) {
     const reader = response.body?.getReader();
