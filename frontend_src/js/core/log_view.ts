@@ -1,110 +1,59 @@
 import { Queue } from "../util/queue.js";
 import { h } from "../util/hyperscript.js";
+import { function_format } from "../util/function_format.js";
+import { type AsyncIterSSE } from "../util/sse.js";
 
 /**
- * 
- * @param {string} name name of the function
- * @param {Record<string,any>} args Named Arguments passed to the function
- * @returns A formatted multi line string that looks more like a python function call than json
+ * @deprecated use Entry instead.
  */
-const function_format = (name, args) =>
-    `${name}${Object.keys(args).length === 0 ? '()' : `(\n${Object.entries(args).map(([k, v]) => `  ${k} = ${JSON.stringify(v)},`).join("\n")}\n)`}`
-
-
 class MessageDom {
-    /** @type {HTMLDivElement} */
-    host
-    /** @type {HTMLDivElement} */
-    label
-    /** @type {HTMLDivElement} */
-    body
+    host:HTMLDivElement;
+    label:HTMLDivElement;
+    body:HTMLDivElement;
 
-    /**
-     * @param {HTMLDivElement} host
-     * @param {HTMLDivElement} label
-     * @param {HTMLDivElement} body
-     */
-    constructor(host, label, body) {
+    constructor(host:HTMLDivElement, label:HTMLDivElement, body:HTMLDivElement) {
         this.host = host;
         this.label = label;
         this.body = body;
     }
 }
 
-/** @typedef {(approvals:Record<string, ApprovalStateResolved>) => void} ResumeFunc Pass in map of bools from tool_call_id to approved status to resume the stream */
+/** Pass in map of bools from tool_call_id to approved status to resume the stream */
+export type ResumeFunc = (approvals:Record<string, ApprovalStateResolved>) => void
 
-/**
- * @typedef {Object} StreamMessage
- * @property {string} event
- * @property {any} data
- */
-
-/**
- * @typedef {object} ApprovalState
- * @property {string} tool_call_id
- * @property {string} interrupt_id
- * @property {null|boolean} approved
- */
-/**
- * @typedef ApprovalStateResolved
- * @property {string} tool_call_id
- * @property {string} interrupt_id
- * @property {boolean} approved
- */
-
-/**
- * 
- * @param {ApprovalState} approval_state
- * @returns {approval_state is ApprovalStateResolved}
- */
-export function approval_is_resolved(approval_state) {
-    return approval_state.approved!==null;
+/** @deprecated use SSEEvent */
+export type StreamMessage = {
+    event:string
+    data:any
 }
 
-/**
- * 
- * @param {Record<string, ApprovalState>} approvals 
- * @returns {approvals is Record<string, ApprovalStateResolved>}
- */
-export function approvals_all_resolved(approvals){
+export type ApprovalState = {
+  tool_call_id:string;
+  interrupt_id:string;
+  approved:boolean|null;
+}
+export type ApprovalStateResolved = Omit<ApprovalState, "approved">& {
+  approved:boolean;
+}
+
+export function approvals_all_resolved(approvals:Record<string, ApprovalState>): approvals is Record<string, ApprovalStateResolved>{
     return Object.values(approvals).every(i=>i.approved!==null);
 }
 
 
 export class LogView {
 
-    /** @type {ResumeFunc} */
-    resume;
+    resume:ResumeFunc;
+    train_of_thunk:Queue<() => Promise<AsyncIterSSE>>;
+    /** if the think() method is currently working this internal flag stops it from retriggering */
+    thinking:boolean;
+    message_log:MessageDom[];
+    tool_calls:Record<string, MessageDom>;    
+    approvals:null|Record<string, ApprovalState>;
+    host:HTMLElement;
 
-    /**
-     * @type {Queue<() => Promise<import("../util/sse.js").AsyncIterSSE>>} Thunks that will be thought
-     */
-    train_of_thunk;
 
-    /** @type {boolean} if the think() method is currently working this internal flag stops it from retriggering */
-    thinking;
-
-    /**
-     * @type {MessageDom[]}
-     */
-    message_log;
-
-    /** @type {Record<string, MessageDom>}*/
-    tool_calls;
-
-    /** @type {null|Record<string, ApprovalState>} */
-    approvals;
-
-    /**
-     * @type {HTMLElement} element where the log will be rendered
-     */
-    host
-
-    /**
-     * @param {HTMLElement} host Element where the log will be rendered
-     * @param {(approvals:Record<string, ApprovalState>) => void} resume
-     */
-    constructor(host, resume) {
+    constructor(host:HTMLElement, resume:ResumeFunc) {
         this.resume = resume;
         this.host = host;
         this.approvals = null;
@@ -118,13 +67,7 @@ export class LogView {
         this.host.scrollTop = this.host.scrollHeight;
     }
 
-    /**
-     * @param {string} id
-     * @param {string} name
-     * @param {Record<string,any>} args
-     * @returns {MessageDom}
-     */
-    add_tool_call(id, name, args) {
+    add_tool_call(id:string, name:string, args:Record<string,any>):MessageDom {
         const dom = this.add_entry(
             "tool_call",
             "Tool Call",
@@ -134,12 +77,7 @@ export class LogView {
         return dom
     }
 
-    /**
-     * @param {string} tool_call_id
-     * @param {string} message
-     * @returns {MessageDom}
-     */
-    add_tool_call_result(tool_call_id, message) {
+    add_tool_call_result(tool_call_id:string, message:string):MessageDom {
         const dom = this.tool_calls?.[tool_call_id] ?? this.add_tool_call(
             tool_call_id,
             "unknown",
@@ -151,11 +89,7 @@ export class LogView {
         return dom
     }
 
-    /**
-     * 
-     * @param {string} tool_call_id
-     */
-    add_request_for_approval(tool_call_id) {
+    add_request_for_approval(tool_call_id:string) {
         const dom = this.tool_calls?.[tool_call_id] ?? this.add_tool_call(
             tool_call_id,
             `unknown (Request for Approval looked for tool call id ${tool_call_id})`,
@@ -185,8 +119,8 @@ export class LogView {
                     gap:"2em",
                 }
             },[
-                h("button",{on:{click:on_approve}},"YES"),
-                h("button",{on:{click:on_deny}},"NO")
+                h("button",{class:"approve",on:{click:on_approve}},"YES"),
+                h("button",{class:"deny",on:{click:on_deny}},"NO")
             ])
         ])
 
@@ -195,12 +129,7 @@ export class LogView {
         return dom;
     }
 
-    /**
-     * 
-     * @param {string} tool_call_id 
-     * @param {boolean} result 
-     */
-    set_approval_result(tool_call_id, result) {
+    set_approval_result(tool_call_id:string, result:boolean) {
         if (this.approvals === null || !(tool_call_id in this.approvals)) {
             throw new Error(`unexpected approval ${tool_call_id} ${result}`)
         }
@@ -212,12 +141,7 @@ export class LogView {
         }
     }
 
-    /**
-     * 
-     * @param {string} tool_call_id 
-     * @param {string} interrupt_id
-     */
-    init_approval(tool_call_id, interrupt_id) {
+    init_approval(tool_call_id:string, interrupt_id:string) {
         const a = this.approvals || {};
         this.approvals = a;
         a[tool_call_id] = {
@@ -232,11 +156,9 @@ export class LogView {
     }
 
     /**
-     * @param {string} cls css class
-     * @param {string} label heading
-     * @param {string} text body content
+     * @deprecated use Entry
      */
-    add_entry(cls, label, text) {
+    add_entry(cls:string, label:string, text:string) {
 
         const l = h("div", { class: "label" }, label);
         const b = h("div", { class: "body" }, text);
@@ -252,17 +174,11 @@ export class LogView {
         return msg_dom;
     }
 
-
-
-    /**
-     * @param {AsyncGenerator<StreamMessage>} events
-     */
     async handle_stream(
-        events,
+        events:AsyncIterSSE,
     ) {
 
-        /** @type {MessageDom|null} */
-        let assistant_body = null;
+        let assistant_body:MessageDom|null = null;
 
         for await (const { event, data } of events) {
             if (event === "token") {

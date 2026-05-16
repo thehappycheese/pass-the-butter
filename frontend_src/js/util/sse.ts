@@ -1,17 +1,12 @@
-/** 
- * @typedef {object} SSEEvent 
- * @property {string} event
- * @property {any} data
-*/
-/**
- * @typedef {AsyncGenerator<SSEEvent, void, unknown>} AsyncIterSSE
- */
 
-/**
- * @param {Response} response
- * @returns {AsyncIterSSE}
- */
-export async function* iter_sse(response) {
+export type SSEEvent ={
+    event:string;
+    data:any;
+}
+
+export type  AsyncIterSSE = AsyncGenerator<SSEEvent, void, unknown>;
+
+export async function* iter_sse(response:Response):AsyncIterSSE{
     const reader = response.body?.getReader();
     if (reader===undefined) {
         console.log(response);

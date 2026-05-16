@@ -11,7 +11,7 @@
  *   Dataset entries (becomes data-* attributes).
  * @property {string | string[]} [class]
  *   Class name(s). String or array, joined with spaces.
- * @property {Partial<GlobalEventHandlersEventMap>} [on]
+ * @property {{ [E in keyof GlobalEventHandlersEventMap]?: (this: HTMLElementTagNameMap[K], ev: GlobalEventHandlersEventMap[E]) => void }} [on]
  *   Event listeners, keyed by event name without the "on" prefix: { click, input, keydown }.
  */
 

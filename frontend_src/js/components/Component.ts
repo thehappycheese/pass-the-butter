@@ -10,4 +10,7 @@ export class Component {
             parent.appendChild(this.host);
         }
     }
+    dom(){
+        return this.host;
+    }
 }

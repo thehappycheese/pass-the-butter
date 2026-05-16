@@ -17,9 +17,6 @@
     --update-color: #a0a0b8;
 }
 
-* {
-    box-sizing: border-box;
-}
 
 @keyframes gradient-shift {
     0% { background-position: 0% 50%; }
@@ -45,14 +42,14 @@
 
 body {
     max-width: 900px;
+    height: calc(100vh - 4em);
     margin: 2rem auto;
-    padding: 0 1.5rem;
-    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    padding: 0 1.5em;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
     background: linear-gradient(-45deg, var(--bg-gradient-start), var(--bg-gradient-mid), var(--bg-gradient-end), #1a1a2e);
     background-size: 400% 400%;
     animation: gradient-shift 20s ease infinite;
     color: var(--text-primary);
-    min-height: 100vh;
     line-height: 1.5;
     &::before {
         content: '';
@@ -72,10 +69,10 @@ body {
 .tile-overlay {
     position: fixed;
     inset: 0;
-    background-image: url(img/tile.svg);
+    background-image: url(../img/tile.svg);
     background-repeat: repeat;
     pointer-events: none;
-    z-index: -1;
+    z-index: -100;
 }
 
 h2 {
@@ -97,7 +94,6 @@ h2 {
     border-radius: 16px;
     background: var(--glass-bg);
     backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
     padding: 1rem;
     height: 62vh;
     overflow-y: auto;
@@ -127,7 +123,7 @@ h2 {
 .entry {
     border: 1px solid var(--glass-border);
     border-radius: 12px;
-    padding: 0.75rem 0.9rem;
+    padding: 0.2rem 0.9rem 0.5rem 0.9rem;
     margin-bottom: 0.6rem;
     background: var(--glass-bg);
     backdrop-filter: blur(10px);
@@ -174,6 +170,7 @@ h2 {
     }
 
     &.user {
+        margin-left:2em;
         background: linear-gradient(135deg, rgba(94, 177, 255, 0.12), rgba(94, 177, 255, 0.04));
         border-color: rgba(94, 177, 255, 0.25);
         &::before { background: var(--user-color); box-shadow: 0 0 12px var(--user-color); }
@@ -188,24 +185,14 @@ h2 {
     &.tool_call {
         background: linear-gradient(135deg, rgba(255, 212, 94, 0.12), rgba(255, 212, 94, 0.04));
         border-color: rgba(255, 212, 94, 0.25);
-        font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
-        font-size: 0.88em;
         &::before { background: var(--tool-call-color); box-shadow: 0 0 12px var(--tool-call-color); }
     }
-    &.tool_result {
-        background: linear-gradient(135deg, rgba(255, 140, 94, 0.12), rgba(255, 140, 94, 0.04));
-        border-color: rgba(255, 140, 94, 0.25);
-        font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
-        font-size: 0.88em;
-        &::before { background: var(--tool-result-color); box-shadow: 0 0 12px var(--tool-result-color); }
-    }
-    &.update,
     &.done {
         background: rgba(255, 255, 255, 0.03);
         border-color: rgba(255, 255, 255, 0.08);
         color: var(--text-secondary);
-        font-size: 0.85em;
     }
+
     &.error {
         background: linear-gradient(135deg, rgba(255, 94, 126, 0.15), rgba(255, 94, 126, 0.05));
         border-color: rgba(255, 94, 126, 0.3);
@@ -236,7 +223,6 @@ h2 {
     padding: 0.4rem;
     background: var(--glass-bg);
     backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--glass-border);
     border-radius: 14px;
     box-shadow:
@@ -262,11 +248,12 @@ h2 {
     font-size: 1rem;
     font-family: inherit;
     outline: none;
+
+    &::placeholder {
+        color: var(--text-secondary);
+    }
 }
 
-#input::placeholder {
-    color: var(--text-secondary);
-}
 
 button {
     padding: 0.75rem 1.5rem;
@@ -295,5 +282,23 @@ button {
         opacity: 0.5;
         cursor: default;
         animation: pulse-glow 1.5s ease-in-out infinite;
+    }
+
+    &.approve {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        box-shadow: 0 4px 16px rgba(34, 197, 94, 0.35);
+
+        &:hover:not(:disabled) {
+            box-shadow: 0 6px 24px rgba(34, 197, 94, 0.5);
+        }
+    }
+
+    &.deny {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+
+        &:hover:not(:disabled) {
+            box-shadow: 0 6px 24px rgba(239, 68, 68, 0.5);
+        }
     }
 }

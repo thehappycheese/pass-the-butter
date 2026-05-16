@@ -1,10 +1,8 @@
 import { iter_sse } from "../util/sse.js";
+import { ApprovalStateResolved } from "./log_view.js";
 
-/**
- * @param {string} user_message 
- * @param {string} session_id 
- */
-export async function endpoint_stream (user_message, session_id){
+
+export async function endpoint_stream(user_message: string, session_id: string) {
     const response = await fetch("/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -17,11 +15,8 @@ export async function endpoint_stream (user_message, session_id){
     return iter_sse(response);
 }
 
-/**
- * @param {Record<string, import("./log_view.js").ApprovalStateResolved>} approvals
- * @param {string} session_id
- */
-export async function endpoint_resume(approvals, session_id){
+
+export async function endpoint_resume(approvals: Record<string, ApprovalStateResolved>, session_id: string) {
     const response = await fetch("/resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

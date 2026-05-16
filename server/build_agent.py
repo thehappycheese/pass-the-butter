@@ -2,11 +2,10 @@
 import os
 
 from langchain_anthropic import ChatAnthropic
-from langchain_core.language_models import BaseChatModel
-from langchain.agents import create_agent, AgentState
+from langchain.agents import create_agent
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from pydantic import SecretStr
 
 from .tools.dummy_counter import increment_dummy_counter
@@ -21,10 +20,7 @@ from .tools.toy_business import (
 
 BuildAgentResult = CompiledStateGraph[MessagesState, None, MessagesState, MessagesState]
 
-# TODO place this on the API of the function below.
-checkpointer = InMemorySaver()
-
-def build_agent() -> BuildAgentResult:
+def build_agent(checkpointer:AsyncPostgresSaver) -> BuildAgentResult:
     
     llm = ChatAnthropic(
         model_name="claude-opus-4-5",

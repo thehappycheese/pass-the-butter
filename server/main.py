@@ -1,6 +1,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 from fastapi import  FastAPI, Request
 from fastapi.responses import RedirectResponse
@@ -26,10 +27,10 @@ async def add_no_cache_header(request: Request, call_next):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
 
-STATIC_DIR = Path("static").resolve()
+STATIC_DIR = Path("frontend_dist").resolve()
 assert STATIC_DIR.is_dir()
 
-app.mount("/debug", StaticFiles(directory="static"), name="static")
+app.mount("/debug", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.get("/")
 async def redirect():
@@ -149,4 +150,82 @@ async def resume(request: Request, body: ResumeRequest, agent: DependsAgent):
     })
     return EventSourceResponse(
         content=_event_gen(request, inputs, body.session_id, agent)
+    )
+
+
+class ThreadHistoryRequest(BaseModel):
+    session_id: str
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant" | "system" | "tool"
+    content: str
+    # Optional fields useful for re-rendering tool calls, timestamps, etc.
+    name: str | None = None
+    tool_call_id: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class ThreadHistoryResponse(BaseModel):
+    session_id: str
+    messages: list[ChatMessage]
+
+
+@app.post("/thread_history", response_model=ThreadHistoryResponse)
+async def thread_history(
+    body: ThreadHistoryRequest,
+    agent: DependsAgent,
+) -> ThreadHistoryResponse:
+    """
+    Return a snapshot of the conversation history for the given session
+    so the client can hydrate its chat log on startup.
+    """
+    config:RunnableConfig = {"configurable": {"thread_id": body.session_id}}
+
+    # get_state_history returns an iterable of StateSnapshot, newest first.
+    # The most recent snapshot holds the full current message list.
+    history_iter = agent.aget_state_history(config)
+    latest = await anext(aiter(history_iter), None)
+
+    if latest is None:
+        return ThreadHistoryResponse(session_id=body.session_id, messages=[])
+
+    raw_messages = latest.values.get("messages", [])
+
+    messages: list[ChatMessage] = []
+    for m in raw_messages:
+        messages.append(_to_chat_message(m))
+
+    return ThreadHistoryResponse(session_id=body.session_id, messages=messages)
+
+
+def _to_chat_message(m: Any) -> ChatMessage:
+    """Normalize a LangChain/LangGraph message object into our wire format."""
+    # LangChain messages expose .type ("human"/"ai"/"system"/"tool") and .content
+    role_map = {
+        "human": "user",
+        "ai": "assistant",
+        "system": "system",
+        "tool": "tool",
+    }
+    msg_type = getattr(m, "type", None) or getattr(m, "role", "assistant")
+    role = role_map.get(msg_type, msg_type)
+
+    content = getattr(m, "content", "")
+    if isinstance(content, list):
+        # Some messages have structured content blocks; flatten to text.
+        content = "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in content
+        )
+
+    return ChatMessage(
+        role=role,
+        content=content,
+        name=getattr(m, "name", None),
+        tool_call_id=getattr(m, "tool_call_id", None),
+        metadata={
+            "id": getattr(m, "id", None),
+            "tool_calls": getattr(m, "tool_calls", None),
+        },
     )
