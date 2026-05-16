@@ -1,14 +1,14 @@
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncGenerator, TypedDict
 
 from fastapi import  FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from langgraph.types import Command
+from langgraph.types import Command, Interrupt
 from langgraph.graph import MessagesState
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 from langchain_core.messages import HumanMessage, AIMessageChunk, AIMessage, ToolMessage
@@ -37,12 +37,17 @@ async def redirect():
     return RedirectResponse(url="/debug/index.html")
 
 
+class SSEEvent(TypedDict):
+    event:str
+    data:str
+
 async def _event_gen(
     request: Request,
     inputs: MessagesState | Command,
     session_id: str,
     agent: DependsAgent,
-):
+) -> AsyncGenerator[SSEEvent]:
+    
     config:RunnableConfig = {
         "configurable": {"thread_id": session_id}
     }
@@ -85,18 +90,47 @@ async def _event_gen(
             case "updates":
                 if not ns:  # skip root-graph updates; they replay subgraph output
                     continue
-                if isinstance(payload,dict):
-                    for node_name, node_output in payload.items():
-                        if not isinstance(node_output, dict):
-                            continue
-                        for m in node_output.get("messages", []):
-                            for tc in getattr(m, "tool_calls", None) or []:
-                                yield {"event": "tool_call", "data": json.dumps({
-                                    "id":tc["id"],
-                                    "name": tc["name"],
-                                    "args": tc["args"],
-                                })}
+                if not isinstance(payload,dict):
+                    print("update that is not dict encountered??");
+                    print(payload);
+                    continue
 
+                for node_name, node_output in payload.items():
+                    match node_output:
+                        case {"messages":messages}:
+                            for message in messages:
+                                match message:
+                                    case AIMessage(tool_calls=tool_calls):
+                                        for tool_call in tool_calls:
+                                            yield {
+                                                "event": "tool_call",
+                                                "data": json.dumps({
+                                                    "id":tool_call["id"],
+                                                    "name": tool_call["name"],
+                                                    "args": tool_call["args"],
+                                                })
+                                            }
+                                    case ToolMessage():
+                                        pass
+                                    case x:
+                                        print("unknown node message type encountered")
+                        case (Interrupt(),):
+                            pass
+                        # case (Interrupt(
+                        #     interrupt_id=interrupt_id,
+                        #     value={"tool":tool_name, "args":args, "tool_call_id":tool_call_id}
+                        # ),):
+                        #     yield {
+                        #         "event":"tool_call",
+                        #         "data":json.dumps({
+                        #             "interrupt_id":interrupt_id,
+                        #             "tool_call_id":tool_call_id,
+                        #             "name":tool_name,
+                        #             "args":args
+                        #         })
+                        #     }
+                        case x:
+                            print("unknown node update format encountered")             
             case "custom":
                 yield {"event": "custom", "data": json.dumps(payload, default=str)}
             case x:

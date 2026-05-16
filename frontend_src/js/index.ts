@@ -12,7 +12,7 @@ import { MainLayout } from "./components/MainLayout.js";
 
 // const SESSION_ID = crypto.randomUUID();
 
-const SESSION_ID = "7"; // guaranteed random, chosen by fair dice
+const SESSION_ID = "9"; // guaranteed random, chosen by fair dice
 
 
 const main_layout = new MainLayout(document.body);

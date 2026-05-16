@@ -2,6 +2,7 @@ import { Queue } from "../util/queue.js";
 import { h } from "../util/hyperscript.js";
 import { function_format } from "../util/function_format.js";
 import { type AsyncIterSSE } from "../util/sse.js";
+import { Entry } from "../components/Entry.js";
 
 /**
  * @deprecated use Entry instead.
@@ -47,8 +48,8 @@ export class LogView {
     train_of_thunk:Queue<() => Promise<AsyncIterSSE>>;
     /** if the think() method is currently working this internal flag stops it from retriggering */
     thinking:boolean;
-    message_log:MessageDom[];
-    tool_calls:Record<string, MessageDom>;    
+    message_log:Entry[];
+    tool_calls:Record<string, Entry>;    
     approvals:null|Record<string, ApprovalState>;
     host:HTMLElement;
 
